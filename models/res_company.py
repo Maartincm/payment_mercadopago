@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from odoo import fields, osv, models, api
+from openerp import fields, osv, models, api
 
 
 class ResCompany(models.Model):

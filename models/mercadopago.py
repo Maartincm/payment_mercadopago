@@ -13,11 +13,11 @@ import datetime
 import requests
 import re
 
-from odoo.addons.payment.models.payment_acquirer import ValidationError
-from odoo.addons.payment_mercadopago.controllers.main import MercadoPagoController
-from odoo import osv, fields, models, api
-from odoo.tools.float_utils import float_compare
-from odoo import SUPERUSER_ID
+from openerp.addons.payment.models.payment_acquirer import ValidationError
+from openerp.addons.payment_mercadopago.controllers.main import MercadoPagoController
+from openerp import osv, fields, models, api
+from openerp.tools.float_utils import float_compare
+from openerp import SUPERUSER_ID
 
 _logger = logging.getLogger(__name__)
 from dateutil.tz import *
@@ -26,7 +26,7 @@ dateformat="%Y-%m-%dT%H:%M:%S."
 dateformatmilis="%f"
 dateformatutc="%z"
 
-from odoo.addons.payment_mercadopago.mercadopago import mercadopago
+from openerp.addons.payment_mercadopago.mercadopago import mercadopago
 
 class AcquirerMercadopago(models.Model):
     _inherit = 'payment.acquirer'
@@ -48,16 +48,14 @@ class AcquirerMercadopago(models.Model):
                 'mercadopago_rest_url': 'https://api.sandbox.mercadolibre.com/oauth/token',
             }
 
-    def _get_providers(self, context=None):
-
-        providers = super(AcquirerMercadopago, self)._get_providers(cr, uid, context=context)
+    @api.model
+    def _get_providers(self):
+        providers = super(AcquirerMercadopago, self)._get_providers()
         providers.append(['mercadopago', 'MercadoPago'])
-
-        print "_get_providers: ", providers
 
         return providers
 
-    provider = fields.Selection(selection_add=[('mercadopago', 'MercadoPago')])
+    provider = fields.Selection('_get_providers')
     #mercadopago_client_id = fields.Char('MercadoPago Client Id',required_if_provider='mercadopago')
     mercadopago_client_id = fields.Char('MercadoPago Client Id', size=256)
     #mercadopago_secret_key = fields.Char('MercadoPago Secret Key',required_if_provider='mercadopago')
@@ -115,6 +113,7 @@ class AcquirerMercadopago(models.Model):
                     }, context=context)
         return True
 
+    @api.multi
     def mercadopago_compute_fees(self, amount, currency_id, country_id):
         """ Compute mercadopago fees.
 
@@ -158,7 +157,7 @@ class AcquirerMercadopago(models.Model):
         return path
 
     @api.multi
-    def mercadopago_form_generate_values(self, values):
+    def mercadopago_form_generate_values(self, values, context=None):
         base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
         acquirer = self
 
@@ -168,26 +167,26 @@ class AcquirerMercadopago(models.Model):
 
         saleorder_obj = self.env['sale.order']
         saleorderline_obj = self.env['sale.order.line']
-        sorder_s = saleorder_obj.search([ ('name','=',tx_values["reference"]) ] )
+        sorder_s = saleorder_obj.search([ ('name','=',context["reference"]) ] )
         shipments = ''
-        amount = tx_values["amount"]
-        melcatid = False
+        amount = context["amount"]
+        # melcatid = False
         if (sorder_s):
             print "sorder_s.name: ", sorder_s.name
             print "len(sorder_s.order_line): ", len(sorder_s.order_line)
             print "sorder_s.order_line[0]: ", sorder_s.order_line[0].name
             if (len(sorder_s.order_line)>0):
                 firstprod = sorder_s.order_line[0].product_id
-                if (firstprod.meli_category):
-                    melcatid = firstprod.meli_category.meli_category_id
+                # if (firstprod.meli_category):
+                #     melcatid = firstprod.meli_category.meli_category_id
             for oline in  sorder_s.order_line:
                 print "oline: ", oline.name
                 print "oline.product_id: ", oline.product_id
                 print "oline.product_id.name ", oline.product_id.name
                 #print "oline.product_id.name ", oline.product_id.
                 if (str(oline.product_id.name.encode("utf-8")) == str('MercadoEnvíos')):
-                    print "oline category: ", melcatid
-                    melcatidrequest = 'https://api.mercadolibre.com/categories/'+str(melcatid)+'/shipping'
+                    # print "oline category: ", melcatid
+                    # melcatidrequest = 'https://api.mercadolibre.com/categories/'+str(melcatid)+'/shipping'
                     headers = {'Accept': 'application/json', 'Content-type':'application/json'}
                     uri = self.make_path(melcatidrequest)
                     print "oline melcatidrequest: ", melcatidrequest
@@ -200,7 +199,7 @@ class AcquirerMercadopago(models.Model):
                             "mode": "me2",
                             #"dimensions": "30x30x30,500",
                             "dimensions": dims,
-                            "zip_code": tx_values.get("partner_zip"),
+                            "zip_code": tx_values.get("zip", False),
                         }
                     print "oline shipments: ", shipments
 
@@ -236,32 +235,32 @@ class AcquirerMercadopago(models.Model):
             preference = {
                 "items": [
                 {
-                    "title": "Orden Ecommerce "+ tx_values["reference"] ,
+                    "title": "Orden Ecommerce "+ context["reference"] ,
                     #"picture_url": "https://www.mercadopago.com/org-img/MP3/home/logomp3.gif",
                     "quantity": 1,
-                    "currency_id":  tx_values['currency'] and tx_values['currency'].name or '',
+                    "currency_id":  context['currency'] and context['currency'].name or '',
                     "unit_price": amount,
                     #"categoryid": "Categoría",
                 }
                 ]
                 ,
                 "payer": {
-		            "name": tx_values.get("partner_name"),
-		            "surname": tx_values.get("partner_first_name"),
-		            "email": tx_values.get("partner_email"),
+		            "name": tx_values.get("first_name"),
+		            "surname": tx_values.get("last_name"),
+		            "email": tx_values.get("email"),
 #		            "date_created": "2015-01-29T11:51:49.570-04:00",
 		            "phone": {
 #			            "area_code": "+5411",
-			            "number": tx_values.get("partner_phone")
+			            "number": tx_values.get("phone")
 		            },
 #		            "identification": {
 #			            "type": "DNI",
 #			            "number": "12345678"
 #		            },
 		            "address": {
-			            "street_name": tx_values.get("partner_address"),
+			            "street_name": tx_values.get("address"),
 			            "street_number": "",
-			            "zip_code": tx_values.get("partner_zip"),
+			            "zip_code": tx_values.get("zip"),
 		            }
 	            },
 	            "back_urls": {
@@ -296,7 +295,7 @@ class AcquirerMercadopago(models.Model):
 #		            }
 #	            },
 	            "notification_url": '%s' % urlparse.urljoin( base_url, MercadoPagoController._notify_url),
-	            "external_reference": tx_values["reference"],
+	            "external_reference": context["reference"],
 	            "expires": True,
 	            "expiration_date_from": self.mercadopago_dateformat( datetime.datetime.now(tzlocal()) ),
 	            "expiration_date_to": self.mercadopago_dateformat( datetime.datetime.now(tzlocal())+datetime.timedelta(days=31) )
@@ -366,7 +365,9 @@ class AcquirerMercadopago(models.Model):
 #            mercadopago_tx_values['handling'] = '%.2f' % mercadopago_tx_values.pop('fees', 0.0)
 #        if mercadopago_tx_values.get('return_url'):
 #            mercadopago_tx_values['custom'] = json.dumps({'return_url': '%s' % mercadopago_tx_values.pop('return_url')})
-        return mercadopago_tx_values
+        mercadopago_tx_values.update(context)
+        self.with_context(tx_url=preferenceResult['response']['init_point'])
+        return mercadopago_tx_values, mercadopago_tx_values
 
     @api.multi
     def mercadopago_get_form_action_url(self):
