@@ -20,7 +20,7 @@ class MercadoPagoController(http.Controller):
     _return_url = '/payment/mercadopago/dpn/'
     _cancel_url = '/payment/mercadopago/cancel/'
 
-    def _get_return_url(self, **post):
+    def _get_return_url(self, post):
         """ Extract the return URL from the data coming from MercadoPago. """
 
 #        return_url = post.pop('return_url', '')
@@ -30,7 +30,7 @@ class MercadoPagoController(http.Controller):
         return_url = ''
         return return_url
 
-    def mercadopago_validate_data(self, **post):
+    def mercadopago_validate_data(self, post):
         """ MercadoPago IPN: three steps validation to ensure data correctness
 
          - step 1: return an empty HTTP 200 response -> will be done at the end
@@ -84,22 +84,24 @@ class MercadoPagoController(http.Controller):
 #            _logger.warning('MercadoPago: unrecognized mercadopago answer, received %s instead of VERIFIED or INVALID' % resp.text)
         return res
 
-    @http.route('/payment/mercadopago/ipn/', type='http', auth='none')
+    @http.route('/payment/mercadopago/ipn/', type='json', auth='none', methods=['POST'])
     def mercadopago_ipn(self, **post):
         """ MercadoPago IPN. """
         # recibimo algo como http://www.yoursite.com/notifications?topic=payment&id=identificador-de-la-operación
         #segun el topic:
         # luego se consulta con el "id"
+        post = request.httprequest.values.to_dict()
+        # TODO: chequear las keys, sanitizar
         _logger.info('Beginning MercadoPago IPN form_feedback with post data %s', pprint.pformat(post))  # debug
-        self.mercadopago_validate_data(**post)
+        self.mercadopago_validate_data(post)
         return ''
 
     @http.route('/payment/mercadopago/dpn', type='http', auth="none")
     def mercadopago_dpn(self, **post):
         """ MercadoPago DPN """
         _logger.info('Beginning MercadoPago DPN form_feedback with post data %s', pprint.pformat(post))  # debug
-        return_url = self._get_return_url(**post)
-        self.mercadopago_validate_data(**post)
+        return_url = self._get_return_url(post)
+        self.mercadopago_validate_data(post)
         return werkzeug.utils.redirect(return_url)
 
     @http.route('/payment/mercadopago/cancel', type='http', auth="none")
