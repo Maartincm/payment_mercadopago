@@ -72,8 +72,6 @@ class AcquirerMercadopago(models.Model):
     mercadopago_api_access_token = fields.Char('Access Token')
     mercadopago_api_access_token_validity = fields.Datetime('Access Token Validity')
 
-    mercadopago_last_payment_url = fields.Char('Last Payment Url')
-
 
     _defaults = {
         'mercadopago_use_ipn': True,
@@ -93,7 +91,7 @@ class AcquirerMercadopago(models.Model):
             company_id = company.id
             company_mercadopago_account = company.mercadopago_account
             if company_mercadopago_account:
-                company_mercadopago_ids = self.search([('company_id', '=', company_id), ('provider', '=', 'mercadopago')], limit=1, context=context)
+                company_mercadopago_ids = self.search([('company_id', '=', company_id), ('provider', '=', 'mercadopago')], limit=1)
                 if company_mercadopago_ids:
                     self.write( company_mercadopago_ids, {'mercadopago_email_account': company_mercadopago_account}, context=context)
                 else:
@@ -103,7 +101,7 @@ class AcquirerMercadopago(models.Model):
                         'provider': 'mercadopago',
                         'mercadopago_email_account': company_mercadopago_account,
                         'view_template_id': mercadopago_view.id,
-                    }, context=context)
+                    })
         return True
 
     @api.multi
@@ -270,15 +268,10 @@ class AcquirerMercadopago(models.Model):
             })
 
         mercadopago_tx_values.update(context)
-        self.write({'mercadopago_last_payment_url': linkpay})
         return mercadopago_tx_values, mercadopago_tx_values
 
     @api.multi
     def mercadopago_get_form_action_url(self):
-        linkpay = self.mercadopago_last_payment_url
-        if linkpay:
-            self.write({'mercadopago_last_payment_url': ''})
-            return linkpay
         return self._get_mercadopago_urls(self.environment)['mercadopago_form_url']
 
     def _mercadopago_s2s_get_access_token(self, ids, context=None):
@@ -290,7 +283,7 @@ class AcquirerMercadopago(models.Model):
         res = dict.fromkeys(ids, False)
         parameters = werkzeug.url_encode({'grant_type': 'client_credentials'})
 
-        for acquirer in self.browse( ids, context=context):
+        for acquirer in self.browse(ids):
             tx_url = self._get_mercadopago_urls( acquirer.environment)['mercadopago_rest_url']
             request = urllib2.Request(tx_url, parameters)
 
@@ -332,7 +325,7 @@ class TxMercadoPago(models.Model):
             raise ValidationError(error_msg)
 
         # find tx -> @TDENOTE use txn_id ?
-        tx_ids = self.env['payment.transaction'].search( [('reference', '=', reference)], context=context)
+        tx_ids = self.env['payment.transaction'].search( [('reference', '=', reference)])
         if not tx_ids or len(tx_ids) > 1:
             error_msg = 'MercadoPago: received data for reference %s' % (reference)
             if not tx_ids:
@@ -341,7 +334,7 @@ class TxMercadoPago(models.Model):
                 error_msg += '; multiple order found'
             _logger.error(error_msg)
             raise ValidationError(error_msg)
-        return self.browse( tx_ids[0], context=context)
+        return self.browse( tx_ids[0])
 
     @api.multi
     def _mercadopago_form_get_invalid_parameters(self, data):
@@ -382,6 +375,7 @@ class TxMercadoPago(models.Model):
     #called by Trans.form_feedback(...) > %s_form_validate(...)
     @api.multi
     def _mercadopago_form_validate(self, data):
+	return True
         status = data.get('collection_status')
         data = {
             'acquirer_reference': data.get('external_reference'),
@@ -446,7 +440,7 @@ class TxMercadoPago(models.Model):
             Experimental code. You should not use it before OpenERP v8 official
             release.
         """
-        tx = self.create( values, context=context)
+        tx = self.create(values)
         tx_id = tx.id
 
         headers = {

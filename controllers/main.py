@@ -101,7 +101,7 @@ class MercadoPagoController(http.Controller):
         """ MercadoPago DPN """
         _logger.info('Beginning MercadoPago DPN form_feedback with post data %s', pprint.pformat(post))  # debug
         return_url = self._get_return_url(post)
-        self.mercadopago_validate_data(post)
+        self.mercadopago_validate_data({})
         return werkzeug.utils.redirect(return_url)
 
     @http.route('/payment/mercadopago/cancel', type='http', auth="none")
@@ -109,9 +109,9 @@ class MercadoPagoController(http.Controller):
         """ When the user cancels its MercadoPago payment: GET on this route """
         cr, uid, context = request.cr, SUPERUSER_ID, request.context
         _logger.info('Beginning MercadoPago cancel with post data %s', pprint.pformat(post))  # debug
-        return_url = self._get_return_url(**post)
+        return_url = self._get_return_url(post)
         status = post.get('collection_status')
         if status=='null':
             post['collection_status'] = 'cancelled'
-        self.mercadopago_validate_data(**post)
+        self.mercadopago_validate_data({})
         return werkzeug.utils.redirect(return_url)
