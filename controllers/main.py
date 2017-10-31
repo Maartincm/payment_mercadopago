@@ -14,6 +14,7 @@ from openerp.http import request
 
 _logger = logging.getLogger(__name__)
 
+from openerp.addons.payment_mercadopago.mercadopago import mercadopago
 
 class MercadoPagoController(http.Controller):
     _notify_url = '/payment/mercadopago/ipn/'
@@ -30,7 +31,7 @@ class MercadoPagoController(http.Controller):
         return_url = ''
         return return_url
 
-    def mercadopago_validate_data(self, post):
+    def mercadopago_validate_data(self, post, status=False):
         """ MercadoPago IPN: three steps validation to ensure data correctness
 
          - step 1: return an empty HTTP 200 response -> will be done at the end
@@ -41,16 +42,26 @@ class MercadoPagoController(http.Controller):
 
         Once data is validated, process it. """
         res = False
-        #new_post = dict(post, cmd='_notify-validate')
-
-#       topic = payment
-#       id = identificador-de-la-operación
-        topic = post.get('topic')
-        op_id = post.get('id')
-
         cr, uid, context = request.cr, request.uid, request.context
+        topic = post.get('topic')
+	type = post.get('type')
         reference = post.get('external_reference')
+        op_id = post.get('data.id') or post.get('id', False)
+	preference_id = post.get('preference_id')
+	if not op_id and not preference_id:
+	    return res
+
+	acquirer = request.env['payment.acquirer'].search([('name', '=', 'MercadoPago')])
+	MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
+	if op_id:
+	    payment_info = MPago.get_payment_info(op_id)
+
+	if preference_id:
+	    preference = MPago.get_preference(preference_id)
+
+
         tx = None
+	import ipdb;ipdb.set_trace()
         if reference:
             tx_ids = request.registry['payment.transaction'].search(cr, uid, [('reference', '=', reference)], context=context)
             if tx_ids:
@@ -59,29 +70,17 @@ class MercadoPagoController(http.Controller):
 
 
         _logger.info('MercadoPago: validating data')
-        #print "new_post:", new_post
         _logger.info('MercadoPago: %s' % post)
+	if status == 'cancel':
+	    state = 'cancel'
 
 
         if tx:
+	    transaction_vals = {'state': state,
+				}
             _logger.info('MercadoPago: ')
-            res = request.registry['payment.transaction'].form_feedback( cr, SUPERUSER_ID, post, 'mercadopago', context=context)
+	    tx.write(transaction_vals)
 
-#        https://api.mercadolibre.com/collections/?access_token=
-#        if :
-
-#        mercadopago_urls = request.registry['payment.acquirer']._get_mercadopago_urls(cr, uid, tx and tx.acquirer_id and tx.acquirer_id.env or 'prod', context=context)
-#        validate_url = mercadopago_urls['mercadopago_form_url']
-#        urequest = urllib2.Request(validate_url, werkzeug.url_encode(new_post))
-#        uopen = urllib2.urlopen(urequest)
-#        resp = uopen.read()
-#        if resp == 'VERIFIED':
-#            _logger.info('MercadoPago: validated data')
-#            res = request.registry['payment.transaction'].form_feedback(cr, SUPERUSER_ID, post, 'mercadopago', context=context)
-#        elif resp == 'INVALID':
-#            _logger.warning('MercadoPago: answered INVALID on data verification')
-#        else:
-#            _logger.warning('MercadoPago: unrecognized mercadopago answer, received %s instead of VERIFIED or INVALID' % resp.text)
         return res
 
     @http.route('/payment/mercadopago/ipn/', type='json', auth='none', methods=['POST'])
@@ -100,18 +99,19 @@ class MercadoPagoController(http.Controller):
     def mercadopago_dpn(self, **post):
         """ MercadoPago DPN """
         _logger.info('Beginning MercadoPago DPN form_feedback with post data %s', pprint.pformat(post))  # debug
-        return_url = self._get_return_url(post)
-        self.mercadopago_validate_data({})
+	acquirer = request.env['payment.acquirer'].search([('name', 'ilike', 'mercadopago')])
+	MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
+        return_url = acquirer.mercadopago_base_url or self._get_return_url(post)
+        self.mercadopago_validate_data(post, 'return')
         return werkzeug.utils.redirect(return_url)
 
     @http.route('/payment/mercadopago/cancel', type='http', auth="none")
     def mercadopago_cancel(self, **post):
         """ When the user cancels its MercadoPago payment: GET on this route """
         cr, uid, context = request.cr, SUPERUSER_ID, request.context
+	acquirer = request.env['payment.acquirer'].search([('name', 'ilike', 'mercadopago')])
+	MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
         _logger.info('Beginning MercadoPago cancel with post data %s', pprint.pformat(post))  # debug
-        return_url = self._get_return_url(post)
-        status = post.get('collection_status')
-        if status=='null':
-            post['collection_status'] = 'cancelled'
-        self.mercadopago_validate_data({})
+        return_url = acquirer.mercadopago_base_url or self._get_return_url(post)
+        self.mercadopago_validate_data(post, 'cancel')
         return werkzeug.utils.redirect(return_url)

@@ -11,6 +11,7 @@
                     <group attrs="{'invisible': [('provider', '!=', 'mercadopago')]}">
                         <group>
                             <group>
+				<field name="mercadopago_base_url"/>
 
                                 <field name="mercadopago_client_id"/>
                                 <field name="mercadopago_secret_key"/>
