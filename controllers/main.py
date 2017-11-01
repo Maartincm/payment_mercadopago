@@ -136,9 +136,9 @@ class MercadoPagoController(http.Controller):
         MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
         return_url = acquirer.mercadopago_base_url or self._get_return_url(post)
         self.mercadopago_validate_data(post, 'return')
-        Response.status = "200 OK"
+        Response.status = "301 Moved"
         _logger.info(_("Redirecting user to: %s" % return_url))
-        return werkzeug.utils.redirect(return_url)
+        return werkzeug.utils.redirect(return_url, 301)
 
     @http.route('/payment/mercadopago/cancel', type='http', auth="none")
     def mercadopago_cancel(self, **post):
@@ -149,6 +149,6 @@ class MercadoPagoController(http.Controller):
         _logger.info('Beginning MercadoPago cancel with post data %s', pprint.pformat(post))  # debug
         return_url = acquirer.mercadopago_base_url or self._get_return_url(post)
         self.mercadopago_validate_data(post, 'cancel')
-        Response.status = "200 OK"
+        Response.status = "301 Moved"
         _logger.info(_("Redirecting user to: %s" % return_url))
-        return werkzeug.utils.redirect(return_url)
+        return werkzeug.utils.redirect(return_url, 301)
