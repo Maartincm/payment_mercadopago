@@ -59,6 +59,7 @@ class AcquirerMercadopago(models.Model):
     mercadopago_email_account = fields.Char('MercadoPago Email ID', size=256)
 
     mercadopago_base_url = fields.Char('Base URL', size=256)
+    mercadopago_test_url = fields.Char('Test URL', size=256)
 
     mercadopago_seller_account = fields.Char(
             'MercadoPago Merchant ID',
