@@ -63,6 +63,16 @@ class MercadoPagoController(http.Controller):
             #TODO Check if we can get the amount paid from somewhere else more reliable
             amount_paid = preference['response']['items'][0]['unit_price']
 
+        if acquirer.environment == 'prod':
+            try:
+                status = payment_info['response']['collection']['status']
+                amount_paid = payment_info['response']['collection']['total_paid_amount']
+                reference = payment_info['response']['collection']['reason']
+            except:
+                status = False
+                reference = False
+                amount_paid = False
+
 
         tx = None
         if reference:
@@ -79,7 +89,9 @@ class MercadoPagoController(http.Controller):
         else:
             state = 'pending'
 
-        status = post.get('collection_status')
+        if acquirer.environment == 'test':
+            status = post.get('collection_status', False)
+
         if status and status == 'approved' and tx and reference and amount_paid:
             state = 'done'
             #TODO See if this can be moved to somewhere else
@@ -88,9 +100,8 @@ class MercadoPagoController(http.Controller):
                 fee_line_id = int(reference.split('Cuota:')[1])
                 fee_line = fee_line_model.browse(fee_line_id)
                 wizard_register_payment = request.env['register.fee.payment']
-                #TODO Use a proper Journal (Maybe in payment.configuration)
-                #journal = request.env.ref("account.bank_journal")
-                journal = request.env['account.journal'].sudo().search([])[0]
+                # Journal from payment.acquirer
+                journal = acquirer.journal_id
                 #TODO Check all the sudos
                 ctx = {'active_id': fee_line.id, 'active_ids': [fee_line.id]}
                 payment_wiz = wizard_register_payment.\
@@ -125,7 +136,7 @@ class MercadoPagoController(http.Controller):
         # TODO: chequear las keys, sanitizar
         _logger.info('Beginning MercadoPago IPN form_feedback with post data %s', pprint.pformat(post))  # debug
         self.mercadopago_validate_data(post, 'ipn')
-        Response.status = "200 OK"
+        #Response.status = "200 OK"
         return {'status': "200 OK"}
 
     @http.route('/payment/mercadopago/dpn', type='http', auth="none")
@@ -133,10 +144,14 @@ class MercadoPagoController(http.Controller):
         """ MercadoPago DPN """
         _logger.info('Beginning MercadoPago DPN form_feedback with post data %s', pprint.pformat(post))  # debug
         acquirer = request.env['payment.acquirer'].search([('name', 'ilike', 'mercadopago')])
-        MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
+        #MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
         return_url = acquirer.mercadopago_base_url or self._get_return_url(post)
+        if acquirer.environment == 'prod':
+            return_url = acquirer.mercadopago_base_url + "/index.php/mercadopago/confirmacionPago" or self._get_return_url(post)
+        elif acquirer.environment == 'test':
+            return_url = acquirer.mercadopago_test_url + "/index.php/mercadopago/confirmacionPago" or self._get_return_url(post)
         self.mercadopago_validate_data(post, 'return')
-        Response.status = "301 Moved"
+        #Response.status = "301 Moved"
         _logger.info(_("Redirecting user to: %s" % return_url))
         return werkzeug.utils.redirect(return_url, 301)
 
@@ -145,10 +160,13 @@ class MercadoPagoController(http.Controller):
         """ When the user cancels its MercadoPago payment: GET on this route """
         cr, uid, context = request.cr, SUPERUSER_ID, request.context
         acquirer = request.env['payment.acquirer'].search([('name', 'ilike', 'mercadopago')])
-        MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
+        #MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
         _logger.info('Beginning MercadoPago cancel with post data %s', pprint.pformat(post))  # debug
-        return_url = acquirer.mercadopago_base_url or self._get_return_url(post)
+        if acquirer.environment == 'prod':
+            return_url = acquirer.mercadopago_base_url + "/index.php/mercadopago/cancelacionPago" or self._get_return_url(post)
+        elif acquirer.environment == 'test':
+            return_url = acquirer.mercadopago_test_url + "/index.php/mercadopago/cancelacionPago" or self._get_return_url(post)
         self.mercadopago_validate_data(post, 'cancel')
-        Response.status = "301 Moved"
+        #Response.status = "301 Moved"
         _logger.info(_("Redirecting user to: %s" % return_url))
         return werkzeug.utils.redirect(return_url, 301)
