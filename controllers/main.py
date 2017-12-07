@@ -67,7 +67,7 @@ class MercadoPagoController(http.Controller):
             try:
                 status = payment_info['response']['collection']['status']
                 amount_paid = payment_info['response']['collection']['total_paid_amount']
-                reference = payment_info['response']['collection']['reason']
+                reference = payment_info['response']['collection']['order_id']
             except:
                 status = False
                 reference = False
