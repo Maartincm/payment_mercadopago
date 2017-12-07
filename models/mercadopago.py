@@ -378,7 +378,6 @@ class TxMercadoPago(models.Model):
     #called by Trans.form_feedback(...) > %s_form_validate(...)
     @api.multi
     def _mercadopago_form_validate(self, data):
-	return True
         status = data.get('collection_status')
         data = {
             'acquirer_reference': data.get('external_reference'),
