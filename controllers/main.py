@@ -79,7 +79,6 @@ class MercadoPagoController(http.Controller):
             tx_ids = request.registry['payment.transaction'].search(cr, uid, [('reference', '=', reference)], context=context)
             if tx_ids:
                 tx = request.registry['payment.transaction'].browse(cr, uid, tx_ids[0], context=context)
-                _logger.info('mercadopago_validate_data() > payment.transaction: %s' % tx)
 
 
         _logger.info('MercadoPago: validating data')
@@ -115,13 +114,12 @@ class MercadoPagoController(http.Controller):
 
             except Exception as e:
                 _logger.error(_("Error! Couldn't Register Payment for fee %s With Error: %s" % (reference, e)))
+                state = 'error'
 
-        # TODO Check get_payment_info with MPago Production
-
-        if tx:
+        if tx and tx.state != state:
             transaction_vals = {'state': state,
                                 }
-            _logger.info('MercadoPago: ')
+            _logger.info('mercadopago_validate_data() > payment.transaction: %s' % tx)
             tx.sudo().write(transaction_vals)
 
         return res
