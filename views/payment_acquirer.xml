@@ -47,6 +47,17 @@
                         </group>
                     </page>
                 </xpath>
+                <xpath expr="//sheet/group[1]" position="before">
+                    <div class="oe_right oe_button_box" name="buttons">
+                        <button type="object"
+                            class="oe_stat_button"
+                            id="mercadopago_recompute_transaction_vals_button"
+                            icon="fa-download"
+                            name="mercadopago_recompute_transaction_vals">
+                            <div><strong>Recompute<br/>Values</strong></div>
+                        </button>
+                    </div>
+                </xpath>
             </field>
         </record>
 

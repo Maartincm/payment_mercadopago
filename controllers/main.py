@@ -55,6 +55,7 @@ class MercadoPagoController(http.Controller):
 
         acquirer = request.env['payment.acquirer'].search([('name', '=', 'MercadoPago')])
         MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
+        payment_info = False
         if op_id:
             payment_info = MPago.get_payment_info(op_id)
 
@@ -63,64 +64,19 @@ class MercadoPagoController(http.Controller):
             #TODO Check if we can get the amount paid from somewhere else more reliable
             amount_paid = preference['response']['items'][0]['unit_price']
 
-        if acquirer.environment == 'prod':
-            try:
-                status = payment_info['response']['collection']['status']
-                amount_paid = payment_info['response']['collection']['total_paid_amount']
-                reference = payment_info['response']['collection']['order_id']
-            except:
-                status = False
-                reference = False
-                amount_paid = False
-
-
         tx = None
         if reference:
             tx_ids = request.registry['payment.transaction'].search(cr, uid, [('reference', '=', reference)], context=context)
             if tx_ids:
                 tx = request.registry['payment.transaction'].browse(cr, uid, tx_ids[0], context=context)
-
-
-        _logger.info('MercadoPago: validating data')
-        _logger.info('MercadoPago: %s' % post)
-        if status == 'cancel':
-            state = 'cancel'
-        else:
-            state = 'pending'
+                tx._log_mp_payment(payment_info)
 
         if acquirer.environment == 'test':
-            status = post.get('collection_status', False)
+            payment_info = {'response': {'collection': {'status': post.get('collection_status', False),
+                                                        'order_id': reference,}}}
 
-        if status and status == 'approved' and tx and reference and amount_paid:
-            state = 'done'
-            #TODO See if this can be moved to somewhere else
-            fee_line_model = request.env['student.fee.line']
-            try:
-                fee_line_id = int(reference.split('Cuota:')[1])
-                fee_line = fee_line_model.browse(fee_line_id)
-                wizard_register_payment = request.env['register.fee.payment']
-                # Journal from payment.acquirer
-                journal = acquirer.journal_id
-                #TODO Check all the sudos
-                ctx = {'active_id': fee_line.id, 'active_ids': [fee_line.id]}
-                payment_wiz = wizard_register_payment.\
-                                with_context(ctx).sudo().create(dict(
-                                date_paid=time.strftime("%Y-%m-%d"),
-                                payment_method_id=journal.id,
-                                amount_paid=amount_paid))
-
-                payment_wiz.onchange_date_paid()
-                payment_wiz.register_payment()
-
-            except Exception as e:
-                _logger.error(_("Error! Couldn't Register Payment for fee %s With Error: %s" % (reference, e)))
-                state = 'error'
-
-        if tx and tx.state != state:
-            transaction_vals = {'state': state,
-                                }
-            _logger.info('mercadopago_validate_data() > payment.transaction: %s' % tx)
-            tx.sudo().write(transaction_vals)
+        if tx:
+            tx._process_payment(op_id, payment_info)
 
         return res
 

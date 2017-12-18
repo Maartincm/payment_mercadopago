@@ -20,6 +20,8 @@ from openerp.tools.float_utils import float_compare
 from openerp import SUPERUSER_ID
 from openerp.exceptions import except_orm
 
+from pprint import pformat
+
 _logger = logging.getLogger(__name__)
 from dateutil.tz import *
 
@@ -313,6 +315,113 @@ class TxMercadoPago(models.Model):
 
     mercadopago_txn_id = fields.Char('Transaction ID')
     mercadopago_txn_type = fields.Char('Transaction type')
+
+    state = fields.Selection(selection=[
+            ('draft', _('Draft')), ('pending', _('Pending')),
+             ('done', _('Done')), ('error', _('Error')), ('rejected', _('Rejected')),
+             ('cancel', _('Canceled'))], string='Status', required=True,
+            track_visibility='onchange', copy=False)
+
+    @api.multi
+    def mercadopago_recompute_transaction_vals(self):
+        acquirer = self.env['payment.acquirer'].search([('name', '=', 'MercadoPago')])
+        for trans in self:
+            if not trans.mercadopago_txn_id:
+                warning_popup = {
+                    'type': 'ir.actions.client',
+                    'tag': 'action_warn',
+                    'name': 'Warning',
+                    'params': {
+                        'title': _('Warning!'),
+                        'text': _('This Transactions does not have a Payment ID :('),
+                        'sticky': False,
+                    }
+                }
+                return warning_popup
+            trans._process_payment(trans.mercadopago_txn_id)
+
+
+    def _log_mp_payment(self, payment_info):
+        completion_vals = {
+            'trans_name': self.reference,
+            'p_info': pformat(payment_info),
+        }
+        _logger.info("Mercadopago Payment Information for %(trans_name)s: %(p_info)s" % completion_vals)
+
+
+    def _process_payment(self, payment_id, payment_info=False):
+        if not payment_info:
+            acquirer = self.env['payment.acquirer'].search([('name', '=', 'MercadoPago')])
+            MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
+            payment_info = MPago.get_payment_info(payment_id)
+            self._log_mp_payment(payment_info)
+        try:
+            status = payment_info['response']['collection']['status']
+        except:
+            status = False
+        try:
+            amount_paid = payment_info['response']['collection']['total_paid_amount']
+        except:
+            amount_paid = False
+        try:
+            reference = payment_info['response']['collection']['order_id']
+        except:
+            reference = False
+        try:
+            state_message = payment_info['response']['collection']['status_detail']
+        except:
+            state_message = False
+
+        if not status:
+            raise except_orm(_("Error"), _("No Status Defined when Computing MP Payment"))
+        if not reference:
+            raise except_orm(_("Error"), _("No Reference Defined when Computing MP Payment"))
+
+        if status == 'approved' and self.state != 'done' and self.amount == amount_paid:
+            state = 'done'
+            fee_line_model = self.env['student.fee.line']
+            try:
+                fee_line_id = int(reference.split('Cuota:')[1])
+                fee_line = fee_line_model.browse(fee_line_id)
+                wizard_register_payment = self.env['register.fee.payment']
+                # Journal from payment.acquirer
+                journal = acquirer.journal_id
+                ctx = {'active_id': fee_line.id, 'active_ids': [fee_line.id]}
+                payment_wiz = wizard_register_payment.\
+                                with_context(ctx).sudo().create(dict(
+                                date_paid=fields.Date.context_today(self),
+                                payment_method_id=journal.id,
+                                amount_paid=amount_paid))
+
+                payment_wiz.onchange_date_paid()
+                payment_wiz.register_payment()
+
+            except Exception as e:
+                _logger.error(_("Error! Couldn't Register Payment for fee %s With Error: %s" % (reference, e)))
+                state = 'error'
+
+        elif status == 'rejected':
+            state = 'rejected'
+
+        elif status == 'cancel':
+            state = 'cancel'
+
+        else:
+            state = 'pending'
+
+        transaction_vals = {'state': state,
+                            'state_message': state_message,
+                            'mercadopago_txn_id': payment_id,
+                            }
+        _logger.info('_process_payment() Mercadopago for Transaction: %s' % self.reference)
+        self.sudo().write(transaction_vals)
+        if self.mercadopago_txn_id and payment_id and self.mercadopago_txn_id != payment_id:
+            vals = {'old_id': self.mercadopago_txn_id,
+                    'new_id': payment_id,}
+            body = _("Old Payment Id: %(old_id)s. \nNew Payment Id: %(new_id)s") % vals
+            author_id = self.env['res.users'].browse(1)
+            self.message_post(body=body, subject="Payment Id Change", type="notification", subtype="mt_comment", author_id=author_id.id)
+        return True
 
 
     # --------------------------------------------------
