@@ -153,7 +153,7 @@ class AcquirerMercadopago(models.Model):
 
     @api.multi
     def mercadopago_form_generate_values(self, values, context=None):
-        base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
+        base_url = self.env['ir.config_parameter'].sudo().get_param('web.url')
         acquirer = self
 
         tx_values = dict(values)
@@ -351,6 +351,8 @@ class TxMercadoPago(models.Model):
 
     def _process_payment(self, payment_id, payment_info=False):
         if not payment_info:
+            if not payment_id:
+                return False
             acquirer = self.env['payment.acquirer'].search([('name', '=', 'MercadoPago')])
             MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
             payment_info = MPago.get_payment_info(payment_id)
@@ -377,7 +379,7 @@ class TxMercadoPago(models.Model):
         if not reference:
             raise except_orm(_("Error"), _("No Reference Defined when Computing MP Payment"))
 
-        if status == 'approved' and self.state != 'done' and self.amount == amount_paid:
+        if status == 'approved' and self.state != 'done':
             state = 'done'
             fee_line_model = self.env['student.fee.line']
             try:

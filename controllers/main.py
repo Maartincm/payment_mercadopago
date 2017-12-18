@@ -48,7 +48,7 @@ class MercadoPagoController(http.Controller):
         topic = post.get('topic')
         type = post.get('type')
         reference = post.get('external_reference')
-        op_id = post.get('data.id') or post.get('id', False)
+        op_id = post.get('data.id', False) or post.get('id', False)
         preference_id = post.get('preference_id')
         if not op_id and not preference_id:
             return res
@@ -58,6 +58,10 @@ class MercadoPagoController(http.Controller):
         payment_info = False
         if op_id:
             payment_info = MPago.get_payment_info(op_id)
+            try:
+                reference = payment_info['response']['collection']['order_id']
+            except:
+                reference = False
 
         if preference_id:
             preference = MPago.get_preference(preference_id)
