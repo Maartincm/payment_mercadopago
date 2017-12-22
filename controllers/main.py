@@ -80,7 +80,7 @@ class MercadoPagoController(http.Controller):
                                                         'order_id': reference,}}}
 
         if tx:
-            tx._process_payment(op_id, payment_info)
+            tx._process_payment(op_id, payment_info, status)
 
         return res
 

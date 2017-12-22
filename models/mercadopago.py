@@ -349,7 +349,7 @@ class TxMercadoPago(models.Model):
         _logger.info("Mercadopago Payment Information for %(trans_name)s: %(p_info)s" % completion_vals)
 
 
-    def _process_payment(self, payment_id, payment_info=False):
+    def _process_payment(self, payment_id, payment_info=False, status=False):
         if not payment_info:
             if not payment_id:
                 return False
@@ -360,7 +360,7 @@ class TxMercadoPago(models.Model):
         try:
             status = payment_info['response']['collection']['status']
         except:
-            status = False
+            pass
         try:
             amount_paid = payment_info['response']['collection']['total_paid_amount']
         except:
