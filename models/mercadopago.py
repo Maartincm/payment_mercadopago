@@ -349,12 +349,8 @@ class TxMercadoPago(models.Model):
         _logger.info("Mercadopago Payment Information for %(trans_name)s: %(p_info)s" % completion_vals)
 
 
-<<<<<<< Updated upstream
     def _process_payment(self, payment_id, payment_info=False, status=False):
-=======
-    def _process_payment(self, payment_id, payment_info=False):
         acquirer = self.env['payment.acquirer'].search([('name', '=', 'MercadoPago')])
->>>>>>> Stashed changes
         if not payment_info:
             if not payment_id:
                 return False
