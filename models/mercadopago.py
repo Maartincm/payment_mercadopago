@@ -349,14 +349,19 @@ class TxMercadoPago(models.Model):
         _logger.info("Mercadopago Payment Information for %(trans_name)s: %(p_info)s" % completion_vals)
 
 
+<<<<<<< Updated upstream
     def _process_payment(self, payment_id, payment_info=False, status=False):
+=======
+    def _process_payment(self, payment_id, payment_info=False):
+        acquirer = self.env['payment.acquirer'].search([('name', '=', 'MercadoPago')])
+>>>>>>> Stashed changes
         if not payment_info:
             if not payment_id:
                 return False
-            acquirer = self.env['payment.acquirer'].search([('name', '=', 'MercadoPago')])
             MPago = mercadopago.MP(acquirer.mercadopago_client_id, acquirer.mercadopago_secret_key)
             payment_info = MPago.get_payment_info(payment_id)
-            self._log_mp_payment(payment_info)
+
+        self._log_mp_payment(payment_info)
         try:
             status = payment_info['response']['collection']['status']
         except:
@@ -395,8 +400,8 @@ class TxMercadoPago(models.Model):
                                 payment_method_id=journal.id,
                                 amount_paid=amount_paid))
 
-                payment_wiz.onchange_date_paid()
-                payment_wiz.register_payment()
+                payment_wiz.sudo().onchange_date_paid()
+                payment_wiz.sudo().register_payment()
 
             except Exception as e:
                 _logger.error(_("Error! Couldn't Register Payment for fee %s With Error: %s" % (reference, e)))
