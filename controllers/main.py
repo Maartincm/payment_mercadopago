@@ -59,7 +59,7 @@ class MercadoPagoController(http.Controller):
         if op_id:
             payment_info = MPago.get_payment_info(op_id)
             try:
-                reference = payment_info['response']['collection']['order_id']
+                reference = payment_info['response']['collection']['external_reference']
             except:
                 reference = False
 

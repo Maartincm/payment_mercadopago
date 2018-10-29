@@ -367,7 +367,7 @@ class TxMercadoPago(models.Model):
         except:
             amount_paid = False
         try:
-            reference = payment_info['response']['collection']['order_id']
+            reference = payment_info['response']['collection']['external_reference']
         except:
             reference = False
         try:
@@ -414,8 +414,11 @@ class TxMercadoPago(models.Model):
 
         transaction_vals = {'state': state,
                             'state_message': state_message,
-                            'mercadopago_txn_id': payment_id,
                             }
+
+        if payment_id:
+            transaction_vals['mercadopago_txn_id'] = payment_id
+
         _logger.info('_process_payment() Mercadopago for Transaction: %s' % self.reference)
         self.sudo().write(transaction_vals)
         if self.mercadopago_txn_id and payment_id and self.mercadopago_txn_id != payment_id:
